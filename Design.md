@@ -163,9 +163,10 @@ version of the standard library, and [`tokio`](https://tokio.rs/) .  I
 will stay with Tokio for this project because it is more mature and
 because the other crates are using it.
 
-I will store the shared data in a hash map protected by a `Mutex` and
-an `Arc` pointer.  This two components will allow me to share the data
-among Tokio tasks while protecting them from race conditions.
+I will store the shared data in a hash map protected by a
+`std::sync::Mutex` and an `std::sync::Arc` pointer.  This two
+components will allow me to share the data among Tokio tasks while
+protecting them from race conditions.
 
 I will hold the child process in the data to be able to keep track of
 it it while running and query its status.  According to [its Tokio
@@ -182,31 +183,31 @@ contain fields for: the id, the command string, the status, the owner
 of the job (that I explain below) and the child process while in
 progress (Option).
 
-The `Status` type is an enum with associated values that has four
-variants: `Pending` (not yet started), `Invalid` (when it couldn't be
-executed), `InProgress`, and `Done`. The last variant will have the
-exit status value of the process.
+The `JobStatus` type is an enum with associated values that has four
+variants: `InProgress`, `Stopped` (on user request), and `Done`. The
+last variant will have the exit status value of the process.
 
 The job will be created using the `new` static function of the `Job`
-type as it is customary in Rust.
+type as it is customary in Rust. The command will be launched when the
+`Job` is created with the `Job::new()` function.  Having done so in a
+separate method would to allow to create jobs that can be executed
+later, in order to enable some kind of scheduling mechanism or even
+queues.  We have decided to take the simpler approach here.
 
-I have considered the option to make `Job` implement the
-`Executable` trait that would abstracts the execution capabilities of
-a type.  It would make a lot of sense if would considering other other
-things that could be executed by the server, e.g. database jobs, but
-it seems unnecessary at this moment.
+I have considered the option to make `Job` implement the `Executable`
+trait that would abstracts the execution capabilities of a type.  It
+would make a lot of sense if would considering other other things that
+could be executed by the server, e.g. database jobs, but it seems
+unnecessary at this moment.
 
-I have decided that `Job`s shouldn't execute themselves when created. I or else they would make the
-ability to stop themselves much harder.
+In order to spawn a command, I will be using the Tokio version of
+`std::process::Command`, because I want it to be asynchronous.  The
+instance of `tokio::process::Child` will be stored in the `Job`, so it
+can be killed on user request.
 
-I have been considering launching the command when the `Job` is
-created with the `Job::new()` function, but I have decided against it.
-I believe it is a better idea to allow to create jobs that can be
-executed later, in order to enable some kind of scheduling mechanism
-or even queues.
-
-Finally, in order to spawn a command, I will be using the Tokio version of
-`std::process::Command`, because I want it to be asynchronous.
+Finally, I will redirect the stdout and the stderr of the command to a
+file called `<job_uuid>.text`. This will be preserved as the output of
+that `Job`.
 
 ## Worker-api ##
 
@@ -244,7 +245,7 @@ configure it to avoid support for any version prior to 1.2.
 
 Regarding authentication, I will limit the scope to the one described
 in the introduction to the coding challenge.  I will assume that
-request with a valid token are authenticated and authorized as if it
+requests with a valid token are authenticated and authorized as if it
 were an API key.
 
 #### Authorization ####
@@ -267,11 +268,10 @@ future versions we could limit the number of jobs per user or restrict
 the kind of jobs a user can launch. A user owns the `Job`s it creates.
 
 Access to the data and output of a job as well as the ability to stop
-it, are restricted to the owner of the job. If we were using a JWT, I
-would store the id contained (and signed) in the token, in the `owner`
-field of the `Job`. In this simplified version, the token in the
-header of the request must match the `owner` of the `Job`.
-
+it, are restricted to the owner of the job.  All of the `Job` methods
+include an argument (`as_user`) that is filled with the user id
+contained (and signed) in the JWT token.  In each operation, the value
+is compared with the owner attribute to grant access.
 #### Other Considerations ####
 
 Using UUIDs for the jobs provides an extra layer of confidentiality.
@@ -311,9 +311,10 @@ On success, a new job will be created and start executing.
 
 #### Stop an Existing Job ####
 
-This corresponds to the deletion of an existing resource.  It will work
-independently of the status of the Job (In progress or Done).  No
-further access to the data of the job is allowed, because it is deleted.
+This corresponds to updating an existing resource.  It will work set
+the status of the `Job` to `Stopped` (instead of `InProgress` or
+`Done`).  This command cannot be reversed and it is idempotent.
+Access to the data of the job is still allowed.
 
 ```
 HTTP method: DELETE
@@ -326,6 +327,7 @@ Responses:
 - 400 -> Bad request
 - 401 -> Unauthorized (No token)
 - 403 -> Forbiden (job created by another user)
+- 404 -> Job not found
 ```
 
 #### Get the Status of an Existing Job ####
@@ -344,6 +346,7 @@ Responses:
 - 400 -> Bad request (Wrong uuid format)
 - 401 -> Unauthorized (No token)
 - 403 -> Forbiden (job created by another user)
+- 404 -> Job not found
 ```
 
 #### Get the Output of an Existing Job ####
@@ -358,10 +361,11 @@ Header: token
 Body: Empty
 Responses:
 - 200 -> Job successfull queried. Response contains the file as
-text/plain with the job output. 
+text/plain with the job output.
 - 400 -> Bad request (Wrong uuid format)
 - 401 -> Unauthorized (No token)
 - 403 -> Forbiden (job created by another user)
+- 404 -> Job not found
 ```
 
 ### Implementation ###
@@ -440,6 +444,74 @@ be simple and self documented.
 The token will be provided as a command line parameter and the command
 will be an argument using quotes if required.
 
+### CLI UX ###
+
+Each of the interactions with the API will be implemented as a
+subcommand of `worker-cli`.
+
+#### Start a Job ####
+
+It is implemented with the start command, that takes an argument for
+the command line to be executed and a parameter with the token. There
+is an optional parameter for the UUID.  If the id is omitted, it will
+generate a new one and it will be printed with the result of the
+execution. The output will inform the user if it was successful or the
+error otherwise.
+
+```
+% worker-cli start -t <TOKEN> -i <UUID> "ls -l"
+Success: Job created.
+```
+
+#### Stop a Job ####
+
+It is implemented with the stop command, that takes an argument for
+the UUID of the job to be stopped and a parameter for the token.  The
+output will inform the user if it was successful or the error
+otherwise.
+
+```
+% worker-cli stop -t <TOKEN> <UUID>
+Failed: Job not running.
+```
+
+#### Get Job Status ####
+
+It is implemented with the status command, that takes an argument for
+the UUID of the job to be queried and a parameter for the token.  The
+output will inform the user of the status (`InProgress`, `Stopped`, or
+`Done`). If the status is done if it will inform when it has received
+a signal using `std::process::ExitStatus`.
+
+> In Unix terms the return value is the exit status: the value passed
+> to exit, if the process finished by calling exit. Note that on Unix
+> the exit status is truncated to 8 bits, and that values that didn’t
+> come from a program’s call to exit may be invented the runtime
+> system (often, for example, 255, 254, 127 or 126).
+>
+> On Unix, this will return None if the process was terminated by a
+> signal. ExitStatusExt is an extension trait for extracting any such
+> signal, and other details, from the ExitStatus.
+
+```
+% worker-cli status -t <TOKEN> <UUID>
+Job was stopped.
+```
+
+#### Get Job Output ####
+
+It is implemented with the output command, that takes an argument for
+the UUID of the job to be queried and a parameter for the token.  The
+output of that job will be printed to the stdout or an error to stderr
+if there is any problem.
+
+```
+% worker-cli output -t <TOKEN> <UUID>
+--- BEGIN OUPUT of the command ---
+...
+--- END OUPUT of the command ---
+```
+
 # Trade-offs and To Dos for Evolving this Code #
 
 A design document wouldn't be complete without talking about things
@@ -469,7 +541,7 @@ of those instance to keep control of them.
 I believe that this can be easily changed at this stage of the project,
 should I need to. I could implement use cases, like `GetStatusUseCase`
 that:
-- would take the uuid of the job,
+- would take the UUID of the job,
 - talk to an abstraction of the persistence to retrieve the data and
   put it into a `Job` instance,
 - execute the `get_status()` method,
