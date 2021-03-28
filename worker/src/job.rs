@@ -7,6 +7,7 @@ use uuid::Uuid;
 pub struct Job {
     id: Uuid,
     command_line: String,
+    owner: String,
     child: Option<Child>,
     status: JobStatus,
 }
@@ -16,11 +17,13 @@ impl Job {
     /// UUID.  It spawns the associated command right away.
     ///
     /// * `id` - UUID that will be assigned to the `Job`.
+    /// * `owner` - String id of the owner of the job.  It is used for authorizing operations.
     /// * `command_line` - Command line that will be executed in this job.
-    pub fn new(id: Uuid, command_line: &str) -> Result<Job, JobError> {
+    pub fn new(id: Uuid, owner: &str, command_line: &str) -> Result<Job, JobError> {
         let job = Job {
             id,
             command_line: command_line.to_string(),
+            owner: owner.to_string(),
             child: None,
             status: JobStatus::InProgress,
         };
@@ -51,7 +54,13 @@ impl Job {
     }
 
     /// Return the status of job.
-    pub fn status(&mut self) -> JobStatus {
+    ///
+    /// * `as_user` - Perform this operation for this user id.  It
+    /// must match the onwer or it will return a `Unauthorized` error.
+    pub fn status(&mut self, as_user: &str) -> Result<JobStatus, JobError> {
+        if as_user != self.owner {
+            return Err(JobError::Unauthorized);
+        }
         // Refresh status only if InProgress
         if matches!(self.status, JobStatus::InProgress) {
             if let Some(ref mut child) = self.child {
@@ -69,11 +78,17 @@ impl Job {
             }
         }
 
-        self.status.clone()
+        Ok(self.status.clone())
     }
 
     /// Stop the job using a kill signal.
-    pub fn stop(&mut self) {
+    ///
+    /// * `as_user` - Perform this operation for this user id.  It
+    /// must match the onwer or it will return a `Unauthorized` error.
+    pub fn stop(&mut self, as_user: &str) -> Result<(), JobError> {
+        if as_user != self.owner {
+            return Err(JobError::Unauthorized);
+        }
         if matches!(self.status, JobStatus::InProgress) {
             if let Some(ref mut child) = self.child {
                 match child.start_kill() {
@@ -85,6 +100,7 @@ impl Job {
                 }
             }
         }
+        Ok(())
     }
 
     /// Get the value of the job id. This is a uuid.
@@ -99,9 +115,12 @@ mod tests {
 
     use super::*;
 
+    const OWNER_1: &str = "owner 1";
+    const OWNER_2: &str = "owner 2";
+
     #[tokio::test]
     async fn new_produces_valid_job() {
-        let job = Job::new(Uuid::new_v4(), "ls");
+        let job = Job::new(Uuid::new_v4(), OWNER_1, "ls");
 
         assert!(job.is_ok())
     }
@@ -109,7 +128,7 @@ mod tests {
     #[tokio::test]
     async fn new_preserves_id() {
         let id = Uuid::new_v4();
-        let job = Job::new(id, "ls").unwrap();
+        let job = Job::new(id, OWNER_1, "ls").unwrap();
 
         assert_eq!(id, job.get_id());
     }
@@ -117,7 +136,7 @@ mod tests {
     #[tokio::test]
     async fn new_produces_error_if_command_is_empty() {
         let command = "  ";
-        let job = Job::new(Uuid::new_v4(), command);
+        let job = Job::new(Uuid::new_v4(), OWNER_1, command);
 
         assert!(job.is_err());
         assert!(
@@ -127,55 +146,86 @@ mod tests {
 
     #[tokio::test]
     async fn non_existing_command_returns_failure() {
-        let job = Job::new(Uuid::new_v4(), "mxyzptlk -s");
+        let job = Job::new(Uuid::new_v4(), OWNER_1, "mxyzptlk -s");
 
         assert!(job.is_err());
         assert!(matches!(job.err(), Some(JobError::CommandNotFound)));
     }
 
     #[tokio::test]
-    async fn valid_command_initial_status_is_in_progress() {
-        let mut job = Job::new(Uuid::new_v4(), "sleep 1").unwrap();
+    async fn command_status_is_only_available_to_owner() {
+        let mut job = Job::new(Uuid::new_v4(), OWNER_1, "true").unwrap();
 
-        assert!(matches!(job.status(), JobStatus::InProgress));
+        assert!(job.status(OWNER_2).is_err());
+        assert!(matches!(
+            job.status(OWNER_2).err(),
+            Some(JobError::Unauthorized)
+        ));
+    }
+
+    #[tokio::test]
+    async fn valid_command_initial_status_is_in_progress() {
+        let mut job = Job::new(Uuid::new_v4(), OWNER_1, "sleep 1").unwrap();
+
+        assert!(matches!(
+            job.status(OWNER_1).ok(),
+            Some(JobStatus::InProgress)
+        ));
     }
 
     #[tokio::test]
     async fn valid_command_status_is_done_successful() {
-        let mut job = Job::new(Uuid::new_v4(), "true").unwrap();
+        let mut job = Job::new(Uuid::new_v4(), OWNER_1, "true").unwrap();
 
-        while matches!(job.status(), JobStatus::InProgress) {
+        while matches!(job.status(OWNER_1).ok(), Some(JobStatus::InProgress)) {
             thread::sleep(Duration::from_millis(50));
         }
 
-        assert!(matches!(job.status(), JobStatus::Done(ref status) if status.success()));
+        assert!(
+            matches!(job.status(OWNER_1).ok(), Some(JobStatus::Done(ref status)) if status.success())
+        );
     }
 
     #[tokio::test]
     async fn failing_command_status_is_done_failed() {
-        let mut job = Job::new(Uuid::new_v4(), "false").unwrap();
+        let mut job = Job::new(Uuid::new_v4(), OWNER_1, "false").unwrap();
 
-        while matches!(job.status(), JobStatus::InProgress) {
+        while matches!(job.status(OWNER_1).ok(), Some(JobStatus::InProgress)) {
             thread::sleep(Duration::from_millis(50));
         }
 
-        assert!(matches!(job.status(), JobStatus::Done(ref status) if !status.success()));
+        assert!(
+            matches!(job.status(OWNER_1).ok(), Some(JobStatus::Done(ref status)) if !status.success())
+        );
+    }
+
+    #[tokio::test]
+    async fn command_stop_is_only_available_to_owner() {
+        let mut job = Job::new(Uuid::new_v4(), OWNER_1, "true").unwrap();
+
+        assert!(job.stop(OWNER_2).is_err());
+        assert!(matches!(
+            job.stop(OWNER_2).err(),
+            Some(JobError::Unauthorized)
+        ));
     }
 
     #[tokio::test]
     async fn long_running_command_can_be_stopped() {
-        let mut job = Job::new(Uuid::new_v4(), "sleep 100").unwrap();
+        let mut job = Job::new(Uuid::new_v4(), OWNER_1, "sleep 100").unwrap();
 
         let mut i = 0;
-        while matches!(job.status(), JobStatus::InProgress) {
+        while matches!(job.status(OWNER_1).ok(), Some(JobStatus::InProgress)) {
             thread::sleep(Duration::from_millis(50));
-            if i == 7 {
-                job.stop()
+            if i == 7 && job.stop(OWNER_1).is_err() {
+                break;
             }
             i += 1;
         }
 
         assert!(i < 10);
-        assert!(matches!(job.status(), JobStatus::Done(ref status) if !status.success()));
+        assert!(
+            matches!(job.status(OWNER_1).ok(), Some(JobStatus::Done(ref status)) if !status.success())
+        );
     }
 }

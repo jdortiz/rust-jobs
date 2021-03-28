@@ -15,6 +15,9 @@ pub enum JobError {
     /// file to store the output temporary.  There might be several
     /// reasons for this, so you can check the embedded error.
     IoError(std::io::Error),
+    /// An unauthorized operation has been requested. Only the onwer
+    /// of the job can perform operations on it.
+    Unauthorized,
 }
 
 impl error::Error for JobError {}
@@ -25,6 +28,7 @@ impl Display for JobError {
             JobError::CommandNotFound => write!(f, "Command not found"),
             JobError::IoError(ref err) => write!(f, "I/O error: {}", err),
             JobError::InvalidCommand(ref cmd) => write!(f, "Invalid command {}", cmd),
+            JobError::Unauthorized => write!(f, "Unauthorized operation"),
         }
     }
 }
