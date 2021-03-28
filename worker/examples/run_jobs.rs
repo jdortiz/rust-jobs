@@ -1,10 +1,33 @@
+use std::{thread, time::Duration};
 use uuid::Uuid;
-use worker::{Job, JobError};
+use worker::{Job, JobError, JobStatus};
 
-fn main() -> Result<(), JobError> {
-    let job = Job::new(Uuid::new_v4(), "ls -l")?;
+#[tokio::main]
+async fn main() -> Result<(), JobError> {
+    const COMMAND_1: &str = "sleep 2";
+    const COMMAND_2: &str = "sleep 10";
+    let mut job1 = Job::new(Uuid::new_v4(), COMMAND_1)?;
+    println!("Spawned job 1 ('{}') with id={}", COMMAND_1, job1.get_id());
+    let mut job2 = Job::new(Uuid::new_v4(), COMMAND_2)?;
+    println!("Spawned job 2 ('{}') with id={}", COMMAND_2, job2.get_id());
 
-    println!("Spawned job with id={}", job.get_id());
+    // Wait for job 1 to finish
+    while matches!(job1.status(), JobStatus::InProgress) {
+        println!("Not done yet.");
+        // This is a blocking sleep
+        thread::sleep(Duration::from_millis(500));
+    }
+    // Now that job 1 is done, let's stop job 2
+    job2.stop();
+
+    println!("Finished job 1. Status: {}", job1.status());
+    println!("Finished job 2. Status: {}", job2.status());
+    while matches!(job2.status(), JobStatus::InProgress) {
+        println!("2 not done yet.");
+        // This is a blocking sleep
+        thread::sleep(Duration::from_millis(500));
+    }
+    println!("Finished job 2. Status: {}", job2.status());
 
     Ok(())
 }

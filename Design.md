@@ -195,7 +195,7 @@ later, in order to enable some kind of scheduling mechanism or even
 queues.  We have decided to take the simpler approach here.
 
 I have considered the option to make `Job` implement the `Executable`
-trait that would abstracts the execution capabilities of a type.  It
+trait that would abstract the execution capabilities of a type.  It
 would make a lot of sense if would considering other other things that
 could be executed by the server, e.g. database jobs, but it seems
 unnecessary at this moment.

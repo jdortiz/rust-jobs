@@ -6,6 +6,8 @@ It provides an abstraction over a job.
 */
 mod job;
 mod job_error;
+mod job_status;
 
 pub use job::Job;
 pub use job_error::JobError;
+pub use job_status::JobStatus;
