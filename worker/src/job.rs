@@ -1,6 +1,5 @@
 use crate::JobError;
 use std::{
-    error,
     fs::File,
     process::{Command, Stdio},
 };
@@ -13,26 +12,24 @@ pub struct Job {
 }
 
 impl Job {
-    /// Creates a new `Job` with the given command line and a new UUID.
+    /// Creates a new `Job` with the given command line and a new
+    /// UUID.  It spawns the job right away.
     pub fn new(id: Uuid, command_line: &str) -> Result<Job, JobError> {
         let job = Job {
             id,
             command_line: command_line.to_string(),
         };
-        match job.start() {
-            Err(_) => Err(JobError::InvalidCommand(command_line.to_string())),
-            Ok(_) => Ok(job),
-        }
+        job.start()
     }
 
     // Start the job in a different process. This is a private
     // function because `Job`s are immediatelly started from `new()`
-    fn start(&self) -> Result<(), Box<dyn error::Error>> {
+    fn start(self) -> Result<Job, JobError> {
         // TODO: This doesn't take into account quotes.
         let mut parts = self.command_line.split_whitespace();
         let command = parts
             .next()
-            .ok_or(JobError::InvalidCommand("".to_string()))?;
+            .ok_or(JobError::InvalidCommand(self.command_line.to_string()))?;
         let args = parts;
         let filename = format!("{}.txt", self.id);
         let output = File::create(filename)?;
@@ -44,7 +41,7 @@ impl Job {
             .spawn()?;
         child.wait_with_output()?;
 
-        Ok(())
+        Ok(self)
     }
 
     /// Get the value of the job id. This is a uuid.
@@ -88,5 +85,6 @@ mod tests {
         let job = Job::new(Uuid::new_v4(), "mxyzptlk -s");
 
         assert!(job.is_err());
+        assert!(matches!(job.err(), Some(JobError::CommandNotFound)));
     }
 }
