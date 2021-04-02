@@ -1,9 +1,14 @@
 use std::fmt::{self, Display, Formatter};
 
+/// Type that describes WorkerClient errors
 #[derive(Debug)]
 pub enum Error {
+    /// Problems found by the `Reqwest` client.
     ReqwestError(reqwest::Error),
+    /// HTTP error codes from the API server.
     ApiError(reqwest::StatusCode),
+    /// Errors on internal work of the `WorkerClient`.
+    InternalError,
 }
 
 impl std::error::Error for Error {}
@@ -17,6 +22,7 @@ impl Display for Error {
                 "API error: {}",
                 status.canonical_reason().unwrap_or("unknown")
             ),
+            Error::InternalError => write!(f, "Internal error"),
         }
     }
 }
