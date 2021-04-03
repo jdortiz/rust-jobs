@@ -1,18 +1,16 @@
+use super::{request, response};
 use crate::{security::Claims, JobData};
 use rocket::{delete, get, http::Status, post, State};
 use rocket_contrib::json::Json;
 use rocket_contrib::uuid::Uuid;
-use serde::Deserialize;
-use worker::{Job, JobError};
-
-#[derive(Deserialize, Debug)]
-pub struct JobRequest {
-    id: Uuid,
-    command_line: String,
-}
+use worker::{Job, JobError, JobStatus};
 
 #[post("/", format = "application/json", data = "<new_job>")]
-pub fn create(claims: Claims, new_job: Json<JobRequest>, jobs: State<JobData>) -> Status {
+pub async fn create(
+    claims: Claims,
+    new_job: Json<request::Job>,
+    jobs: State<'_, JobData>,
+) -> Status {
     eprintln!("claim subject: {}", claims.sub);
     eprintln!("New job: {:?}", new_job);
     let new_job = new_job.into_inner();
@@ -33,7 +31,36 @@ pub fn create(claims: Claims, new_job: Json<JobRequest>, jobs: State<JobData>) -
 }
 
 #[get("/<job_id>")]
-pub fn get(claims: Claims, job_id: Uuid, jobs: State<JobData>) -> Status {
+pub async fn get(
+    claims: Claims,
+    job_id: Uuid,
+    jobs: State<'_, JobData>,
+) -> Result<Json<response::JobStatus>, Status> {
+    eprintln!("claim subject: {}", claims.sub);
+    eprintln!("Job to query: {:?}", job_id);
+    let mut jobs_map = jobs.write().unwrap();
+    if let Some(job) = jobs_map.get_mut(&job_id.into_inner()) {
+        match job.status(&claims.sub) {
+            Ok(status) => match status {
+                JobStatus::Failed | JobStatus::InProgress => Ok(Json(response::JobStatus {
+                    status: status.to_string(),
+                    exit_status: None,
+                })),
+                JobStatus::Done(exit_value) => Ok(Json(response::JobStatus {
+                    status: status.to_string(),
+                    exit_status: exit_value.code(),
+                })),
+            },
+            Err(err) if matches!(err, JobError::Unauthorized) => Err(Status::Forbidden),
+            _ => Err(Status::InternalServerError),
+        }
+    } else {
+        Err(Status::NotFound)
+    }
+}
+
+#[delete("/<job_id>")]
+pub async fn delete(claims: Claims, job_id: Uuid, jobs: State<'_, JobData>) -> Status {
     eprintln!("claim subject: {}", claims.sub);
     eprintln!("Job to stop: {:?}", job_id);
     let mut jobs_map = jobs.write().unwrap();
@@ -43,17 +70,6 @@ pub fn get(claims: Claims, job_id: Uuid, jobs: State<JobData>) -> Status {
             Err(err) if matches!(err, JobError::Unauthorized) => Status::Forbidden,
             _ => Status::InternalServerError,
         }
-    } else {
-        Status::NotFound
-    }
-}
-
-#[delete("/<job_id>")]
-pub fn delete(claims: Claims, job_id: Uuid) -> Status {
-    eprintln!("claim subject: {}", claims.sub);
-    eprintln!("Job to stop: {:?}", job_id);
-    if job_id.to_string().starts_with("62") {
-        Status::Ok
     } else {
         Status::NotFound
     }
