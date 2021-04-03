@@ -37,7 +37,7 @@ impl Job {
         let mut parts = self.command_line.split_whitespace();
         let command = parts
             .next()
-            .ok_or(JobError::InvalidCommand(self.command_line.to_string()))?;
+            .ok_or_else(|| JobError::InvalidCommand(self.command_line.to_string()))?;
         let args = parts;
         let filename = format!("{}.txt", self.id);
         let output = File::create(filename)?;
