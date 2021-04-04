@@ -1,6 +1,7 @@
 use super::{error::Error, request, response};
 use reqwest::blocking::Client;
-use std::{array::IntoIter, collections::HashMap};
+use std::{array::IntoIter, collections::HashMap, time::Duration};
+//use std::{fs::File, io::Read}; // TLS
 use uuid::Uuid;
 
 /// Type that defines the parameters for operating with `worker-api`
@@ -13,6 +14,7 @@ impl WorkerClient {
     /// Create a new instance with the default base URL and endpoints.
     pub fn new() -> WorkerClient {
         WorkerClient {
+            // base_url: String::from("https://127.0.0.1:8000"), // TLS
             base_url: String::from("http://127.0.0.1:8000"),
             endpoints: IntoIter::new([
                 ("login".to_string(), "/auth/login".to_string()),
@@ -27,13 +29,31 @@ impl WorkerClient {
         Some(format!("{}{}", self.base_url, path))
     }
 
+    fn customized_client() -> Result<Client, Error> {
+        // TLS
+        /*        let mut buf = Vec::new();
+        File::open("private/rsacert.pem")?.read_to_end(&mut buf)?;
+        let cert = reqwest::Certificate::from_pem(&buf)?;*/
+        let client = Client::builder()
+            /* TLS
+            .add_root_certificate(cert)
+            .connection_verbose(true)
+            .https_only(true)
+            .danger_accept_invalid_hostnames(true)
+            .danger_accept_invalid_certs(true)*/
+            .timeout(Some(Duration::from_secs(5)))
+            .build()?;
+
+        Ok(client)
+    }
+
     /// Login for worker-api and return token.
     ///
     /// * `user` - User name.
     /// * `password` - User password.
     pub fn login(&self, user: &str, password: &str) -> Result<String, Error> {
         let endpoint = self.endpoint("login").ok_or(Error::InternalError)?;
-        let client = Client::new();
+        let client = Self::customized_client()?;
         let login_request = request::Login {
             name: user.to_string(),
             password: password.to_string(),
@@ -55,7 +75,7 @@ impl WorkerClient {
     /// * `command_line` - the command that will be executed in the job.
     pub fn start(&self, token: &str, id: Uuid, command_line: &str) -> Result<(), Error> {
         let endpoint = self.endpoint("jobs").ok_or(Error::InternalError)?;
-        let client = Client::new();
+        let client = Self::customized_client()?;
         let new_job_request = request::NewJob {
             id,
             command_line: command_line.to_string(),
@@ -80,7 +100,7 @@ impl WorkerClient {
     pub fn status(&self, token: &str, id: Uuid) -> Result<String, Error> {
         let endpoint = self.endpoint("jobs").ok_or(Error::InternalError)?;
         let endpoint_with_id = format!("{}/{}", endpoint, id);
-        let client = Client::new();
+        let client = Self::customized_client()?;
         let response = client.get(&endpoint_with_id).bearer_auth(token).send()?;
 
         if response.status().is_success() {
@@ -105,7 +125,7 @@ impl WorkerClient {
     pub fn output(&self, token: &str, id: Uuid) -> Result<String, Error> {
         let endpoint = self.endpoint("jobs").ok_or(Error::InternalError)?;
         let endpoint_with_id = format!("{}/{}/output", endpoint, id);
-        let client = Client::new();
+        let client = Self::customized_client()?;
         let response = client.get(&endpoint_with_id).bearer_auth(token).send()?;
 
         if response.status().is_success() {
@@ -123,7 +143,7 @@ impl WorkerClient {
     pub fn stop(&self, token: &str, id: Uuid) -> Result<(), Error> {
         let endpoint = self.endpoint("jobs").ok_or(Error::InternalError)?;
         let endpoint_with_id = format!("{}/{}", endpoint, id);
-        let client = Client::new();
+        let client = Self::customized_client()?;
         let response = client.delete(&endpoint_with_id).bearer_auth(token).send()?;
 
         if response.status().is_success() {
