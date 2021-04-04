@@ -1,8 +1,7 @@
 use super::{request, response};
 use crate::{security::Claims, JobData};
-use rocket::{delete, get, http::Status, post, State};
-use rocket_contrib::json::Json;
-use rocket_contrib::uuid::Uuid;
+use rocket::{delete, get, http::Status, post, response::NamedFile, State};
+use rocket_contrib::{json::Json, uuid::Uuid};
 use worker::{Job, JobError, JobStatus};
 
 #[post("/", format = "application/json", data = "<new_job>")]
@@ -56,6 +55,34 @@ pub async fn get(
         }
     } else {
         Err(Status::NotFound)
+    }
+}
+
+#[get("/<job_id>/output")]
+pub async fn get_output(
+    claims: Claims,
+    job_id: Uuid,
+    jobs: State<'_, JobData>,
+) -> Result<NamedFile, Status> {
+    eprintln!("claim subject: {}", claims.sub);
+    eprintln!("Job to query: {:?}", job_id);
+    let filename: Result<String, Status>; // = Err(Status::InternalServerError);
+    {
+        let mut jobs_map = jobs.write().unwrap();
+        filename = if let Some(job) = jobs_map.get_mut(&job_id.into_inner()) {
+            job.output(&claims.sub).map_err(|err| match err {
+                JobError::Unauthorized => Status::Forbidden,
+                _ => Status::InternalServerError,
+            })
+        } else {
+            Err(Status::NotFound)
+        }
+    }
+    match filename {
+        Ok(filename) => NamedFile::open(&filename)
+            .await
+            .map_err(|_| Status::InternalServerError),
+        _ => Err(Status::NotFound),
     }
 }
 
