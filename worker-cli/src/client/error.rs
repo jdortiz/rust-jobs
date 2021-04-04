@@ -7,6 +7,8 @@ pub enum Error {
     ReqwestError(reqwest::Error),
     /// HTTP error codes from the API server.
     ApiError(reqwest::StatusCode),
+    /// Errors related to reading files (certificate).
+    FileError(std::io::Error),
     /// Errors on internal work of the `WorkerClient`.
     InternalError,
 }
@@ -22,6 +24,7 @@ impl Display for Error {
                 "API error: {}",
                 status.canonical_reason().unwrap_or("unknown")
             ),
+            Error::FileError(err) => write!(f, "File error: {}", err),
             Error::InternalError => write!(f, "Internal error"),
         }
     }
@@ -30,5 +33,11 @@ impl Display for Error {
 impl From<reqwest::Error> for Error {
     fn from(error: reqwest::Error) -> Self {
         Error::ReqwestError(error)
+    }
+}
+
+impl From<std::io::Error> for Error {
+    fn from(error: std::io::Error) -> Self {
+        Error::FileError(error)
     }
 }
