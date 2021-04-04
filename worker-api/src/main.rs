@@ -15,5 +15,8 @@ fn rocket() -> rocket::Rocket {
         .manage(data)
         .mount("/health", routes![health::health])
         .mount("/auth", routes![auth::login])
-        .mount("/v1/jobs", routes![jobs::create, jobs::get, jobs::delete])
+        .mount(
+            "/v1/jobs",
+            routes![jobs::create, jobs::get, jobs::get_output, jobs::delete],
+        )
 }

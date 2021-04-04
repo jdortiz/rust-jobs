@@ -7,6 +7,7 @@ use uuid::Uuid;
 fn main() {
     const SUBC_LOGIN: &str = "login";
     const SUBC_START: &str = "start";
+    const SUBC_OUTPUT: &str = "output";
     const SUBC_STATUS: &str = "status";
     const SUBC_STOP: &str = "stop";
 
@@ -57,6 +58,18 @@ fn main() {
                      .required(true)
                      .value_name("UUID_V4")))
         .subcommand(
+            SubCommand::with_name(SUBC_OUTPUT).about("get the output of a job")
+		.arg(Arg::with_name("token")
+                     .short("t")
+                     .long("token")
+                     .help("Authorized JWT token")
+                     .takes_value(true)
+                     .value_name("TOKEN_VALUE"))
+		.arg(Arg::with_name("id")
+                     .help("Id of the job to be queried.")
+                     .required(true)
+                     .value_name("UUID_V4")))
+        .subcommand(
             SubCommand::with_name(SUBC_STOP).about("stop a job")
 		.arg(Arg::with_name("token")
                      .short("t")
@@ -81,6 +94,9 @@ fn main() {
         }
         (SUBC_STATUS, Some(subc_matches)) => {
             exec_status(&subc_matches, &worker_client, debug);
+        }
+        (SUBC_OUTPUT, Some(subc_matches)) => {
+            exec_output(&subc_matches, &worker_client, debug);
         }
         (SUBC_STOP, Some(subc_matches)) => {
             exec_stop(&subc_matches, &worker_client, debug);
@@ -160,6 +176,36 @@ fn exec_status(matches: &ArgMatches, worker_client: &WorkerClient, debug: bool) 
             }
             Err(err) => {
                 eprintln!("ERR: Status command error: {}", err);
+            }
+        }
+    } else {
+        eprintln!("ERR: Invalid Id.");
+    }
+}
+
+fn exec_output(matches: &ArgMatches, worker_client: &WorkerClient, debug: bool) {
+    let token = matches.value_of("token").unwrap_or("");
+    if let Some(id) = matches
+        .value_of("id")
+        .map(|id| Uuid::parse_str(id).ok())
+        .flatten()
+    {
+        println!("Querying the output of a job");
+        if debug {
+            println!("Using token: '{}'", token);
+            println!("Job id: '{}'", id.to_string());
+        }
+
+        match worker_client.output(token, id) {
+            Ok(output) => {
+                println!(
+                    "--- BEGIN OUPUT of job {} ---\n{}\n--- END OUPUT ---",
+                    id.to_string(),
+                    output
+                );
+            }
+            Err(err) => {
+                eprintln!("ERR: Output command error: {}", err);
             }
         }
     } else {

@@ -81,6 +81,17 @@ impl Job {
         Ok(self.status.clone())
     }
 
+    /// Return the filename that contains the output of the job.
+    ///
+    /// * `as_user` - Perform this operation for this user id.  It
+    /// must match the onwer or it will return a `Unauthorized` error.
+    pub fn output(&mut self, as_user: &str) -> Result<String, JobError> {
+        if as_user != self.owner {
+            return Err(JobError::Unauthorized);
+        }
+        Ok(format!("{}.txt", self.id))
+    }
+
     /// Stop the job using a kill signal.
     ///
     /// * `as_user` - Perform this operation for this user id.  It
@@ -171,6 +182,26 @@ mod tests {
             job.status(OWNER_1).ok(),
             Some(JobStatus::InProgress)
         ));
+    }
+
+    #[tokio::test]
+    async fn command_output_filename_is_only_available_to_owner() {
+        let mut job = Job::new(Uuid::new_v4(), OWNER_1, "true").unwrap();
+
+        assert!(job.output(OWNER_2).is_err());
+        assert!(matches!(
+            job.output(OWNER_2).err(),
+            Some(JobError::Unauthorized)
+        ));
+    }
+
+    #[tokio::test]
+    async fn owner_can_retrieve_output_filename() {
+        let id = Uuid::new_v4();
+        let mut job = Job::new(id, OWNER_1, "ls").unwrap();
+
+        let filename = format!("{}.txt", id);
+        assert!(matches!(job.output(OWNER_1), Ok(output) if output == filename));
     }
 
     #[tokio::test]

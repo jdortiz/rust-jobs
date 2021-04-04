@@ -98,6 +98,24 @@ impl WorkerClient {
         }
     }
 
+    /// Output of a job in worker-api.
+    ///
+    /// * `token` - authenticated JWT that is obtained from the login command.
+    /// * `id` - valid UUID of the job to be queried.
+    pub fn output(&self, token: &str, id: Uuid) -> Result<String, Error> {
+        let endpoint = self.endpoint("jobs").ok_or(Error::InternalError)?;
+        let endpoint_with_id = format!("{}/{}/output", endpoint, id);
+        let client = Client::new();
+        let response = client.get(&endpoint_with_id).bearer_auth(token).send()?;
+
+        if response.status().is_success() {
+            let output_data = response.text()?;
+            Ok(output_data)
+        } else {
+            Err(Error::ApiError(response.status()))
+        }
+    }
+
     /// Stop a job in worker-api.
     ///
     /// * `token` - authenticated JWT that is obtained from the login command.
