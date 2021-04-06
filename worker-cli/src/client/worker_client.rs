@@ -31,12 +31,12 @@ impl WorkerClient {
     ///
     /// * `user` - User name.
     /// * `password` - User password.
-    pub fn login(&self, user: &str, password: &str) -> Result<String, Error> {
+    pub fn login(&self, user: String, password: String) -> Result<String, Error> {
         let endpoint = self.endpoint("login").ok_or(Error::InternalError)?;
         let client = Client::new();
         let login_request = request::Login {
-            name: user.to_string(),
-            password: password.to_string(),
+            name: user,
+            password,
         };
         let response = client.post(&endpoint).json(&login_request).send()?;
 
