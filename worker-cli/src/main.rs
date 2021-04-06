@@ -101,7 +101,7 @@ fn exec_login(matches: &ArgMatches, worker_client: &WorkerClient, debug: bool) {
     if debug {
         println!("Login to worker-api as user '{}'", user);
     }
-    match worker_client.login(user, password) {
+    match worker_client.login(user.to_string(), password.to_string()) {
         Ok(token) => {
             println!("Copy, paste and execute:");
             println!("export TOKEN={:?}", token);
