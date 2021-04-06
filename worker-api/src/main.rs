@@ -5,7 +5,6 @@ use api::{auth, jobs};
 use rocket::{get, launch, routes};
 use std::{collections::HashMap, sync::RwLock};
 use uuid::Uuid;
-use worker;
 
 #[get("/health")]
 fn health() -> &'static str {

@@ -1,7 +1,7 @@
 use crate::{security::Claims, JobData};
 use rocket::{delete, get, http::Status, post, State};
 use rocket_contrib::json::Json;
-use rocket_contrib::uuid::{extern_uuid, Uuid};
+use rocket_contrib::uuid::Uuid;
 use serde::Deserialize;
 use worker::{Job, JobError};
 

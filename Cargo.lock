@@ -924,20 +924,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rocket-api"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "jsonwebtoken",
- "rocket",
- "rocket_contrib",
- "serde",
- "serde_json",
- "uuid",
- "worker",
-]
-
-[[package]]
 name = "rocket_codegen"
 version = "0.5.0-dev"
 source = "git+https://github.com/SergioBenitez/Rocket#0654890e3d03a91537ee1d06b34ea3d2143f009e"
@@ -1528,6 +1514,20 @@ version = "0.1.0"
 dependencies = [
  "tokio",
  "uuid",
+]
+
+[[package]]
+name = "worker-api"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "jsonwebtoken",
+ "rocket",
+ "rocket_contrib",
+ "serde",
+ "serde_json",
+ "uuid",
+ "worker",
 ]
 
 [[package]]
