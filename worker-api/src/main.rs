@@ -1,16 +1,10 @@
 mod api;
 mod security;
 
-use api::{auth, jobs};
-use rocket::{get, launch, routes};
+use api::{auth, health, jobs};
+use rocket::{launch, routes};
 use std::{collections::HashMap, sync::RwLock};
 use uuid::Uuid;
-
-#[get("/health")]
-fn health() -> &'static str {
-    // This will verify connections to other services or status of the resources
-    "Ok"
-}
 
 type JobData = RwLock<HashMap<Uuid, worker::Job>>;
 
@@ -19,7 +13,10 @@ fn rocket() -> rocket::Rocket {
     let data: JobData = RwLock::new(HashMap::new());
     rocket::ignite()
         .manage(data)
-        .mount("/", routes![health])
+        .mount("/health", routes![health::health])
         .mount("/auth", routes![auth::login])
-        .mount("/v1/jobs", routes![jobs::create, jobs::get, jobs::delete])
+        .mount(
+            "/v1/jobs",
+            routes![jobs::create, jobs::get, jobs::get_output, jobs::delete],
+        )
 }
