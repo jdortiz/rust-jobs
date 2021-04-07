@@ -2,6 +2,8 @@ mod client;
 
 use clap::{crate_authors, crate_name, crate_version, App, Arg, ArgMatches, SubCommand};
 use client::WorkerClient;
+use env_logger;
+use log::info;
 use uuid::Uuid;
 
 fn main() {
@@ -10,6 +12,8 @@ fn main() {
     const SUBC_OUTPUT: &str = "output";
     const SUBC_STATUS: &str = "status";
     const SUBC_STOP: &str = "stop";
+
+    env_logger::init();
 
     let matches = App::new(crate_name!())
         .version(crate_version!())
@@ -137,7 +141,7 @@ fn exec_start(matches: &ArgMatches, worker_client: &WorkerClient, debug: bool) {
     let command_line = matches.value_of("command_line").unwrap_or_default();
 
     if !command_line.trim().is_empty() {
-        println!("Starting a job");
+        info!("Starting a job");
         if debug {
             println!("Using token: '{}'", token);
             println!("New job id: '{}'", id.to_string());
@@ -164,7 +168,7 @@ fn exec_status(matches: &ArgMatches, worker_client: &WorkerClient, debug: bool) 
         .map(|id| Uuid::parse_str(id).ok())
         .flatten()
     {
-        println!("Querying the status of a job");
+        info!("Querying the status of a job");
         if debug {
             println!("Using token: '{}'", token);
             println!("Job id: '{}'", id.to_string());
@@ -190,7 +194,7 @@ fn exec_output(matches: &ArgMatches, worker_client: &WorkerClient, debug: bool) 
         .map(|id| Uuid::parse_str(id).ok())
         .flatten()
     {
-        println!("Querying the output of a job");
+        info!("Querying the output of a job");
         if debug {
             println!("Using token: '{}'", token);
             println!("Job id: '{}'", id.to_string());
@@ -220,7 +224,7 @@ fn exec_stop(matches: &ArgMatches, worker_client: &WorkerClient, debug: bool) {
         .map(|id| Uuid::parse_str(id).ok())
         .flatten()
     {
-        println!("Stopping a job");
+        info!("Stopping a job");
         if debug {
             println!("Using token: '{}'", token);
             println!("Job id: '{}'", id.to_string());

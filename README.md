@@ -26,38 +26,32 @@ It also contains an example that can be executed using:
 
 ### Worker-api ###
 
-The web service can be started with the following command:
+The web service can be started after generating the required
+self-signed certificate. You can use these commands (from the main
+directory of this project):
 ```
-% cargo run -p worker-api
-    Finished dev [unoptimized + debuginfo] target(s) in 0.36s
-     Running `target/debug/worker-api`
+% cargo build
+% mkdir private
+% openssl req -x509 -nodes -days 3650 -newkey rsa:4096 -keyout private/rsakey.pem -out private/rsacert.pem
+% cp worker-api/Rocket.toml.off Rocket.toml
+% target/debug/worker-api
+ target/debug/worker-api                          210407193650
 🔧 Configured for debug.
     => address: 127.0.0.1
     => port: 8000
-== Snip --
-```
-
-This will start the server without TLS. TLS is disabled due to a bug
-in `reqwest` with self-signed certificates. In order to enable TLS, you
-can use these commands:
-```
-% cd worker-api
-% mkdir private
-% cd private
-% openssl req -x509 -nodes -days 3650 -newkey rsa:4096 -keyout rsakey.pem -out rsacert.pem
-% cd ..
-% mv Rocket.toml.off Rocket.toml
-% cargo run
+-- snip --
 ```
 
 You can then use `curl` to test the API.
 
 ### worker-cli ###
 
-The client set up for non-TLS communications, but the code to work
-with TLS is commented out, so can easily be enabled. In order to use
-`worker-client` run `cargo build` from the main directory of this
-project, then you can use it as in the following example:
+The client set up for TLS communications in Linux, but requires a
+change to trust certificates not validated by the OS if you want to
+run it in macOS. There is a single line of code commented out, so can
+easily be enabled, that will reduce the security, but will allow it to
+run. In order to use `worker-client` run `cargo build` from the main
+directory of this project, then you can use it as in the following example:
 ```
 % target/debug/worker-cli login jorge sakdfjeqwoir 210405000351
 Copy, paste and execute:
@@ -81,6 +75,18 @@ drwx------  4 jorge  staff  128  4 abr 17:26 private
 drwxr-xr-x  9 jorge  staff  288  4 abr 13:49 src
 
 --- END OUPUT ---
+```
+
+I have added logging capabilities to `worker-cli` to trace the issue
+in macOS.  They can easily be enabled using:
+```
+% RUST_LOG=TRACE target/debug/worker-cli <your params here>
+```
+
+And in the case of macOS without disabling the validation of the
+certificate, it returns:
+```
+ERR: Login error: Reqwest error: error sending request for url (https://localhost:8000/auth/login): error trying to connect: The certificate was not trusted.
 ```
 
 ## Documentation ##
