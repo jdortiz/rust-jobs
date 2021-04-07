@@ -5,6 +5,8 @@ use std::env;
 
 pub fn login(user: User) -> Option<String> {
     let uid;
+    // FIXME: The authentication is hardcoded for demonstration
+    // purposes. DON'T use in a production system.
     match user.name.as_ref() {
         "jorge" => {
             uid = String::from("f14f83b7-c626-4255-9da4-cec1ac22b4a1");
