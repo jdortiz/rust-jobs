@@ -1,7 +1,7 @@
 use super::{error::Error, request, response};
-use reqwest::blocking::Client;
+use reqwest::{blocking::Client, Certificate};
 use std::{array::IntoIter, collections::HashMap, time::Duration};
-//use std::{fs::File, io::Read}; // TLS
+use std::{fs::File, io::Read};
 use uuid::Uuid;
 
 /// Type that defines the parameters for operating with `worker-api`
@@ -14,8 +14,7 @@ impl WorkerClient {
     /// Create a new instance with the default base URL and endpoints.
     pub fn new() -> WorkerClient {
         WorkerClient {
-            // base_url: String::from("https://127.0.0.1:8000"), // TLS
-            base_url: String::from("http://127.0.0.1:8000"),
+            base_url: String::from("https://localhost:8000"),
             endpoints: IntoIter::new([
                 ("login".to_string(), "/auth/login".to_string()),
                 ("jobs".to_string(), "/v1/jobs".to_string()),
@@ -30,17 +29,13 @@ impl WorkerClient {
     }
 
     fn customized_client() -> Result<Client, Error> {
-        // TLS
-        /*        let mut buf = Vec::new();
+        let mut buf = Vec::new();
         File::open("private/rsacert.pem")?.read_to_end(&mut buf)?;
-        let cert = reqwest::Certificate::from_pem(&buf)?;*/
+        let cert = Certificate::from_pem(&buf)?;
         let client = Client::builder()
-            /* TLS
             .add_root_certificate(cert)
-            .connection_verbose(true)
             .https_only(true)
-            .danger_accept_invalid_hostnames(true)
-            .danger_accept_invalid_certs(true)*/
+            // .danger_accept_invalid_certs(true) // TLS: Required for macOS
             .timeout(Some(Duration::from_secs(5)))
             .build()?;
 
