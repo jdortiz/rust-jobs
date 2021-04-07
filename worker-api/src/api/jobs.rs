@@ -66,10 +66,9 @@ pub async fn get_output(
 ) -> Result<NamedFile, Status> {
     eprintln!("claim subject: {}", claims.sub);
     eprintln!("Job to query: {:?}", job_id);
-    let filename: Result<String, Status>; // = Err(Status::InternalServerError);
-    {
+    let filename: Result<String, Status> = {
         let mut jobs_map = jobs.write().unwrap();
-        filename = if let Some(job) = jobs_map.get_mut(&job_id.into_inner()) {
+        if let Some(job) = jobs_map.get_mut(&job_id.into_inner()) {
             job.output(&claims.sub).map_err(|err| match err {
                 JobError::Unauthorized => Status::Forbidden,
                 _ => Status::InternalServerError,
@@ -77,7 +76,7 @@ pub async fn get_output(
         } else {
             Err(Status::NotFound)
         }
-    }
+    };
     match filename {
         Ok(filename) => NamedFile::open(&filename)
             .await
